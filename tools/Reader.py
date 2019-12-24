@@ -1,20 +1,24 @@
 import cv2
+import time
+
+from Image import Image
 
 class Reader(object):
 
     def __init__(self):
 
-        self._img = None
+        self.img = None
         self.result = None
 
-    def read_from_file(self,path):
+    def read_from_file(self, path):
         #指定路径读取图片
         #input:
         #   path:图片路径
         #读取成功则返回1，失败返回0
 
         try:
-            self._img = cv2.imread(path)
+            pic = cv2.imread(path)
+            self.img = Image(f'path:{path}', pic)
             return True
         except:
             return False
@@ -24,7 +28,8 @@ class Reader(object):
         #读取成功则返回1，失败返回0
         try:
             cap = cv2.VideoCapture(0)
-            _, self._img = cap.read()
+            _, pic = cap.read()
+            self.img = Image(f'camera:{time.time()}', pic)
             return True
         except:
             return False
@@ -35,16 +40,16 @@ if __name__=="__main__":
     reader1 = Reader()
     reader2 = Reader()
 
-    ret1 = reader1.read_from_file("food.jpg")
+    ret1 = reader1.read_from_file(r"..\HP65W_4.png")
     ret2 = reader2.read_from_camera()
 
     if ret1:
-        cv2.imshow("read_from_file", reader1._img)
+        cv2.imshow("read_from_file", reader1.img.binary)
     else:
         print("Cannot read image from file")
 
     if ret2:
-        cv2.imshow("read_from_camera", reader2._img)
+        cv2.imshow("read_from_camera", reader2.img.binary)
     else:
         print("Cannot read video from camera")
 
