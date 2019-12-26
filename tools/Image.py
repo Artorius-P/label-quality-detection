@@ -33,6 +33,7 @@ class Image(object):
         contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         hierarchy = hierarchy[0]
         found = []
+
         for i in range(len(contours)):
             # find bounding box coordinates
             k = i
@@ -45,6 +46,17 @@ class Image(object):
         boxes = []  # 包围盒组
 
         for i in found:
+            x, y, w, h = cv2.boundingRect(contours[i])
+            """rect = cv2.minAreaRect(contour)
+            box = cv2.boxPoints(rect)
+            box = np.int0(box)
+            w = """
+            # if h == 0:
+            #    continue
+            ratio = w / h
+            ratio_grade = ratio
+            if not (0.96 < ratio_grade < 1.04):
+                continue
             rect = cv2.minAreaRect(contours[i])  # 获得轮廓的最小外接矩形
             box = cv2.boxPoints(rect)
             box = np.int0(box)
@@ -58,7 +70,7 @@ class Image(object):
 if __name__ == '__main__':
     cv2.namedWindow("test", 0)
     cv2.namedWindow("raw", 0)
-    raw = cv2.imread(r'..\DELL2_65W_2.png')
+    raw = cv2.imread(r'..\dell2_65w_2.png')
     image = Image('test', raw)
 
     print(image.binary)
