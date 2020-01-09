@@ -2,6 +2,7 @@ import cv2
 import time
 
 import Image
+import Detector
 
 class Reader(object):
 
@@ -19,6 +20,10 @@ class Reader(object):
         try:
             pic = cv2.imread(path)
             self.img = Image.Image(f'path:{path}', pic)
+
+            detector = Detector.Detector(self)
+            self.result = detector.judge()
+
             return True
         except:
             return False
@@ -30,6 +35,10 @@ class Reader(object):
             cap = cv2.VideoCapture(0)
             _, pic = cap.read()
             self.img = Image.Image(f'camera:{time.time()}', pic)
+
+            detector = Detector.Detector(self)
+            self.result = detector.judge()
+
             return True
         except:
             return False

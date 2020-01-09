@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 
-import Image
+from Image import Image
+import Reader
 
 
 
@@ -265,7 +266,7 @@ class Detector(object):
         self.image.qrcode_segmentation += boxes
 
     # 选出条形码区域
-    def find_barcode(self, min_y, max_y, min_x, max_x):
+    def find_barcode(self, min_y, max_y, min_x, max_x, iter=22, area_thresh=20000):
         img = self.image.raw[min_y:max_y, min_x:max_x, :].copy()
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         boxes = []  # 包围盒组
@@ -288,7 +289,7 @@ class Detector(object):
 
         # perform a series of erosions and dilations
         closed = cv2.erode(closed, None, iterations=4)
-        closed = cv2.dilate(closed, None, iterations=4)
+        closed = cv2.dilate(closed, None, iterations=iter)
 
         # find the contours in the thresholded image, then sort the contours
         # by their area, keeping only the largest one
@@ -299,7 +300,7 @@ class Detector(object):
         # compute the rotated bounding box of the largest contour
         for i in range(len(c)):
             area = cv2.contourArea(c[i])
-            if area < 3000:
+            if area < area_thresh:
                 continue
             rect = cv2.minAreaRect(c[i])
             box = np.int0(cv2.boxPoints(rect))
@@ -318,7 +319,7 @@ class Detector(object):
         return boxes
 
     # 判断是否合格
-    def judge(self):
+    def judge(self,thresh=30):
         # 开运算平滑轮廓
         img = self.image.binary
         kernel = np.ones((5, 5), np.uint8)
@@ -326,7 +327,7 @@ class Detector(object):
         h = img.shape[0]
         w = img.shape[1]
         # x为合格阈值
-        x=30
+        x=thresh
         for box in self.image.qrcode_segmentation:
             min_x = float("inf")
             min_y = float("inf")
@@ -437,8 +438,9 @@ class Detector(object):
 
 
 if __name__ == '__main__':
-    raw = cv2.imread('3-2.png')
-    detect=Detector('test', raw)
+    reader = Reader.Reader()
+    reader.read_from_file('3-2.png')
+    detect=Detector(reader)
     image=detect.get_area()
     img1=image.raw.copy()
     for box in image.qrcode_segmentation:
