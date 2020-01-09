@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 
 class Detector(object):
-    def __init__(self):
-        pass
+    def __init__(self,name,raw):
+        self.image = Image(name, raw)
+
 
     # 预处理函数
     def preprocess(self,gray):
@@ -25,11 +26,7 @@ class Detector(object):
         # 6. 再次膨胀，让轮廓明显一些
         dilation2 = cv2.dilate(erosion, element2, iterations=3)
 
-        # 7. 存储中间图片
-        cv2.imwrite("binary.png", binary)
-        cv2.imwrite("dilation.png", dilation)
-        cv2.imwrite("erosion.png", erosion)
-        cv2.imwrite("dilation2.png", dilation2)
+
 
         return dilation2
 
@@ -95,7 +92,8 @@ class Detector(object):
         return region
 
     #获取所有二维码、条形码和光学字符候选位置
-    def detect(self,img,min_y,max_y, min_x,max_x):
+    def detect(self,min_y,max_y, min_x,max_x):
+        img = self.image.raw
         if min_x==max_x or min_y==max_y:
             return None
         if min_x<0:
@@ -103,6 +101,7 @@ class Detector(object):
         if min_y<0:
             min_y=0
         img = img[min_y:max_y, min_x:max_x, :].copy()
+        cv2.imwrite('1.jpg',img)
         # 1.  转化成灰度图
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -125,8 +124,9 @@ class Detector(object):
             box[3][1] += min_y
         return region
 
-
-    def get_label_area(self,img):
+    # 获取标签位置
+    def get_label_area(self):
+        img = self.image.raw
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         ret, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
         region = []
@@ -193,18 +193,10 @@ class Detector(object):
         return region
 
     # 选出二维码区域
-    def find_square(self, img,min_y,max_y, min_x,max_x):
-        if min_x==max_x or min_y==max_y:
-            return None
-        if min_x<0:
-            min_x=0
-        if min_y<0:
-            min_y=0
-        img = img[min_y:max_y, min_x:max_x, :].copy()
-        # edges = cv2.Canny(img, 100, 200)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        ret, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
-        contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    def find_square(self,min_y,max_y, min_x,max_x):
+        img = self.image.binary.copy()
+        img = img[min_y:max_y, min_x:max_x].copy()
+        contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         if hierarchy is None:
             return None
         hierarchy = hierarchy[0]
@@ -223,21 +215,20 @@ class Detector(object):
 
         for i in found:
             x, y, w, h = cv2.boundingRect(contours[i])
-            """rect = cv2.minAreaRect(contour)
-            box = cv2.boxPoints(rect)
-            box = np.int0(box)
-            w = """
-            # if h == 0:
-            #    continue
+
             ratio = w / h
             ratio_grade = ratio
-            if not (0.96 < ratio_grade < 1.04):
+            if not (0.96 < ratio_grade < 1.04):  # 筛去长宽比不合格的
                 continue
             rect = cv2.minAreaRect(contours[i])  # 获得轮廓的最小外接矩形
             box = cv2.boxPoints(rect)
+
+            length = lambda x: abs(x[0][0] - x[2][0]) + abs(x[0][1] - x[2][1])      # 以曼哈顿距离代替边长
+
+            # if length(box) < lmin or length(box) > lmax:  # 筛去边长太短的点
+            #     continue
             box = np.int0(box)
             boxes.append(box)
-        # 相对坐标变为绝对坐标
         for box in boxes:
             box[0][0] += min_x
             box[0][1] += min_y
@@ -247,153 +238,263 @@ class Detector(object):
             box[2][1] += min_y
             box[3][0] += min_x
             box[3][1] += min_y
+            #求该矩形横平竖直的最小外接矩形
+            min_x=9999999999999
+            min_y=9999999999999
+            max_x=0
+            max_y=0
+            for item in box:
+                if item[0]>max_x:
+                    max_x=item[0]
+                if item[0]<min_x:
+                    min_x=item[0]
+                if item[1]>max_y:
+                    max_y=item[1]
+                if item[1]<min_y:
+                    min_y=item[1]
+            box[0][0]=max_x
+            box[0][1] = max_y
+            box[1][0] = min_x
+            box[1][1] = max_y
+            box[2][0] = min_x
+            box[2][1] = min_y
+            box[3][0] = max_x
+            box[3][1] = min_y
+        self.image.qrcode_segmentation += boxes
+
+    def find_barcode(self,min_y,max_y, min_x,max_x):
+        img = self.image.raw[min_y:max_y, min_x:max_x].copy()
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        boxes = []  # 包围盒组
+
+        # compute the Scharr gradient magnitude representation of the images
+        gradX = cv2.Sobel(gray, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
+        gradY = cv2.Sobel(gray, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=-1)
+
+        # subtract the y-gradient from the x-gradient
+        gradient = cv2.subtract(gradX, gradY)
+        gradient = cv2.convertScaleAbs(gradient)
+
+        # blur and threshold the image
+        blurred = cv2.blur(gradient, (9, 9))
+        (_, thresh) = cv2.threshold(blurred, 225, 255, cv2.THRESH_BINARY)
+
+        # construct a closing kernel and apply it to the thresholded image
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 7))
+        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+
+        # perform a series of erosions and dilations
+        closed = cv2.erode(closed, None, iterations=4)
+        closed = cv2.dilate(closed, None, iterations=4)
+
+        # find the contours in the thresholded image, then sort the contours
+        # by their area, keeping only the largest one
+        (cnts, _) = cv2.findContours(closed.copy(), cv2.RETR_EXTERNAL,
+                                     cv2.CHAIN_APPROX_SIMPLE)
+        c = sorted(cnts, key=cv2.contourArea, reverse=True)
+
+        # compute the rotated bounding box of the largest contour
+        for i in range(len(c)):
+            area = cv2.contourArea(c[i])
+            if area < 3000:
+                continue
+            rect = cv2.minAreaRect(c[i])
+            box = np.int0(cv2.boxPoints(rect))
+            boxes.append(box)
         return boxes
 
     # 判断是否合格
-    def judge(self,img,min_y,max_y, min_x,max_x):
+    def judge(self):
+        # 开运算平滑轮廓
+        img = self.image.binary
+        kernel = np.ones((5, 5), np.uint8)
+        img = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
         h = img.shape[0]
         w = img.shape[1]
         # x为合格阈值
-        x=1
-        if min_x-x<0:
-            a=0
-        else:
-            a=min_x-x
-        if min_y-x<0:
-            b=0
-        else:
-            b=min_y-x
-        if max_x+x>w:
-            c=w
-        else:
-            c= max_x+x
-        if max_y+x>h:
-            d=h
-        else:
-            d=max_y+x
-
-        for i in range(a,c):
-            for j in range(b,d):
-                if j>=min_y and j<=max_y and i>=min_x and i<=max_x:
-                    continue
-                if img[j][i]==255:
-                    return False
+        x=30
+        for box in self.image.qrcode_segmentation:
+            min_x = 9999999999999
+            min_y = 9999999999999
+            max_x = 0
+            max_y = 0
+            for item in box:
+                if item[0] > max_x:
+                    max_x = item[0]
+                if item[0] < min_x:
+                    min_x = item[0]
+                if item[1] > max_y:
+                    max_y = item[1]
+                if item[1] < min_y:
+                    min_y = item[1]
+            # 防止边界溢出
+            if min_x-x<0:
+                a=0
+            else:
+                a=min_x-x
+            if min_y-x<0:
+                b=0
+            else:
+                b=min_y-x
+            if max_x+x>w-1:
+                c=w
+            else:
+                c= max_x+x+1
+            if max_y+x>h-1:
+                d=h
+            else:
+                d=max_y+x+1
+            # 遍历二维码周围是否存在距离太近的字符
+            for i in range(a,c):
+                for j in range(b,d):
+                    if j>=min_y and j<=max_y and i>=min_x and i<=max_x:
+                        continue
+                    if img[j][i]==255:
+                        return False
+        for box in self.image.barcode_segmentation:
+            min_x = 9999999999999
+            min_y = 9999999999999
+            max_x = 0
+            max_y = 0
+            for item in box:
+                if item[0] > max_x:
+                    max_x = item[0]
+                if item[0] < min_x:
+                    min_x = item[0]
+                if item[1] > max_y:
+                    max_y = item[1]
+                if item[1] < min_y:
+                    min_y = item[1]
+            # 防止边界溢出
+            if min_x-x<0:
+                a=0
+            else:
+                a=min_x-x
+            if min_y-x<0:
+                b=0
+            else:
+                b=min_y-x
+            if max_x+x>w-1:
+                c=w
+            else:
+                c= max_x+x+1
+            if max_y+x>h-1:
+                d=h
+            else:
+                d=max_y+x+1
+            # 遍历二维码周围是否存在距离太近的字符
+            for i in range(a,c):
+                for j in range(b,d):
+                    if j>=min_y and j<=max_y and i>=min_x and i<=max_x:
+                        continue
+                    if img[j][i]==255:
+                        return False
         return True
-    def get_barcode_area(self,img):
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        bi = cv2.Canny(gray, 50, 150)
-
-        #cv2.imshow("canny",bi[400:,500:])
-
-        h, w = gray.shape
-
-        strip_size = 200
-
-        strip_num = h // strip_size
-
-        strips = [bi[i * strip_size:(i + 1) * strip_size, :] for i in range(strip_num)]
-
-        ind = 0
-        ma = 0
-        chosen = []
-        for k in range(len(strips)):
-            st = strips[k]
-            h0, w0 = st.shape
-            lines = []
-            for i in range(1, w0 - 1):
-
-                if st[0][i] == 255:
-
-                    now = (0, i)
-                    lin = []
-                    while now[0] < h0 - 3:
-                        for j in (now[1] - 1, now[1], now[1] + 1):
-                            if st[now[0] + 1, j] == 255:
-                                lin.append((now[0] + 1, j))
-                                now = (now[0] + 1, j)
-                        if now[0] >= h0 - 3:
-                            break
-                        if st[now[0] + 1, now[1] - 1] + st[now[0] + 1, now[1]] + st[now[0] + 1, now[1] + 1] == 0:
-                            break
-                    if len(lin) >= strip_size // 2:
-                        lines.append(lin)
-            if len(lines) > 100:
-                chosen.append(k)
-            if len(lines) > ma:
-                ma = len(lines)
-                ind = k
-
-        for i in chosen:
-            cv2.imshow("lined" + str(i), img[i * strip_size:(i + 1) * strip_size, 500:])
-            cv2.waitKey()
     #调用函数获取二维码、条形码和光学字符位置
-    def get_area(self,image):
-        img=image.raw
+    def get_area(self):
         # 获得标签位置
-        region=self.get_label_area(img)
+        region=self.get_label_area()
         # 对每个标签寻找二维码、条形码和光学字符位置
+        self.image.character_segmentation +=region
         for box in region:
-            max_x = box[0][0]
-            max_y = box[0][1]
-            min_x = box[1][0]
-            min_y = box[2][1]
-            candicate=self.detect(img,min_y,max_y, min_x,max_x)
+
+            min_x = 9999999999999
+            min_y = 9999999999999
+            max_x = 0
+            max_y = 0
+            for item in box:
+                if item[0] > max_x:
+                    max_x = item[0]
+                if item[0] < min_x:
+                    min_x = item[0]
+                if item[1] > max_y:
+                    max_y = item[1]
+                if item[1] < min_y:
+                    min_y = item[1]
+            candicate=self.detect(min_y,max_y, min_x,max_x)
+            self.find_square(min_y,max_y, min_x,max_x)
+            self.image.barcode_segmentation +=self.find_barcode(min_y,max_y, min_x,max_x)
             if candicate is None:
                 continue
-            for box in candicate:
-                max_x = box[0][0]
-                max_y = box[0][1]
-                min_x = box[1][0]
-                min_y = box[2][1]
-                QRcode=self.find_square(img,min_y,max_y, min_x,max_x)
-                if QRcode:
-                    if self.judge(image.binary,min_y,max_y, min_x,max_x):
-                        image.is_qualified=True
-                        image.qrcode_segmentation.append(box)
-                    else:
-                        image.is_qualified = False
-                        break
-                else:
-                    image.character_segmentation.append(box)
-        return image
+            self.image.character_segmentation+=candicate
+        self.image.is_qualified=self.judge()
+        return self.image
 
 class Image(object):
     def __init__(self, name, raw):
         self.name = name
-        self.raw = raw    # 原图
-        self.binary = None     # 二值化增强的图片
-        self.is_qualified = None    # 是否合格
-        self.qrcode_segmentation = []    # 二维码的分割
-        self.barcode_segmentation = []   #条形码的分割
-        self.character_segmentation = []    # 文字的分割
+        self.raw = raw  # 原图
+        self.binary = None  # 二值化增强的图片
+        self.is_qualified = None  # 是否合格
+        self.qrcode_segmentation = []  # 二维码的分割
+        self.character_segmentation = []  # 文字的分割
+        self.barcode_segmentation=[] # 条形码的分割
         self._to_binary()
+        self.find_square()
 
     def _to_binary(self):
-        gray = cv2.cvtColor(self.raw, cv2.COLOR_BGR2GRAY)
-        # 1. Sobel算子，x方向求梯度
-        sobel = cv2.Sobel(gray, cv2.CV_8U, 1, 0, ksize=3)
-        # 2. 二值化
-        ret, binary = cv2.threshold(sobel, 0, 255, cv2.THRESH_OTSU + cv2.THRESH_BINARY)
-        self.binary=binary
-        # # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        # # img = clahe.apply(img)
-        # #_, self.binary = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
-        # # 局部二值化
-        # block_size = 25
-        # const_value = 10
-        # local_binary = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, const_value)
-        # self.binary = cv2.blur(local_binary, (3, 3))
+        img = cv2.cvtColor(self.raw, cv2.COLOR_BGR2GRAY)
+        # 局部二值化
+        block_size = 25
+        const_value = 10
+        local_binary = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV,
+                                             block_size, const_value)
+        # binary = cv2.GaussianBlur(local_binary, (3, 3), 0)
+        # binary = cv2.Canny(local_binary, 100, 150)
+        self.binary = local_binary
+
+    def find_square(self, img=None, lmin=300, lmax=2000):
+        # edges = cv2.Canny(img, 100, 200)
+        if img is None:
+            img = self.binary.copy()
+        contours, hierarchy = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        hierarchy = hierarchy[0]
+        found = []
+
+        for i in range(len(contours)):
+            # find bounding box coordinates
+            k = i
+            c = 0
+            while hierarchy[k][2] != -1:
+                k = hierarchy[k][2]
+                c = c + 1
+            if c >= 1:
+                found.append(i)
+        boxes = []  # 包围盒组
+
+        for i in found:
+            x, y, w, h = cv2.boundingRect(contours[i])
+
+            ratio = w / h
+            ratio_grade = ratio
+            if not (0.96 < ratio_grade < 1.04):  # 筛去长宽比不合格的
+                continue
+            rect = cv2.minAreaRect(contours[i])  # 获得轮廓的最小外接矩形
+            box = cv2.boxPoints(rect)
+
+            length = lambda x: abs(x[0][0] - x[2][0]) + abs(x[0][1] - x[2][1])      # 以曼哈顿距离代替边长
+
+            if length(box) < lmin or length(box) > lmax:  # 筛去边长太短的点
+                continue
+            box = np.int0(box)
+            boxes.append(box)
+        self.qrcode_segmentation = boxes
 
 if __name__ == '__main__':
-    raw = cv2.imread(r'..\453.png')
-    image = Image('test', raw)
-    image=Detector().get_area(image)
+    raw = cv2.imread(r'..\4.png')
+    detect=Detector('test', raw)
+    image=detect.get_area()
     img1=image.raw.copy()
     for box in image.qrcode_segmentation:
-        cv2.drawContours(img1, [box], 0, (0, 255, 0), 2)
+        cv2.drawContours(img1, [box], -1, (0, 255, 0), 2)
     for box in image.character_segmentation:
-        cv2.drawContours(img1, [box], 0, (0, 0, 255), 2)
+        cv2.drawContours(img1, [box], -1, (0, 0, 255), 2)
+    for box in image.barcode_segmentation:
+        cv2.drawContours(img1, [box], -1, (255, 0, 0), 2)
+    # region=detect.get_label_area()
+    # for box in region:
+    #     cv2.drawContours(img1, [box], 0, (0, 0, 255), 2)
     cv2.imwrite("label.jpg", img1)
-    cv2.imwrite("label.jpg", img1)
+    #cv2.imwrite("label.jpg", img1)
     # Detector().get_barcode_area(img1)
