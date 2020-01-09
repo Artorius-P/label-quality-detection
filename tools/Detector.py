@@ -4,7 +4,9 @@ import numpy as np
 from Image import Image
 import Reader
 
-
+from pylibdmtx.pylibdmtx import decode
+import pytesseract
+from pyzbar import pyzbar
 
 class Detector(object):
     def __init__(self,reader):
@@ -435,6 +437,97 @@ class Detector(object):
             self.image.character_segmentation += candicate
         self.image.is_qualified=self.judge()
         return self.image
+       
+            def read_bar_code(self):
+        str_lst = []
+        for i in self.image.barcode_segmentation:
+            min_x = 9999999999999
+            min_y = 9999999999999
+            max_x = 0
+            max_y = 0
+            for item in i:
+                if item[0] > max_x:
+                    max_x = item[0]
+                if item[0] < min_x:
+                    min_x = item[0]
+                if item[1] > max_y:
+                    max_y = item[1]
+                if item[1] < min_y:
+                    min_y = item[1]
+            pic = self.image.raw[min_y:max_y, min_x:max_x]
+            height, width = pic.shape[:2]
+            if height * width == 0:
+                continue
+            barcodes = pyzbar.decode(pic)
+            if barcodes == []:
+                continue
+            for barcode in barcodes:  # 循环读取检测到的条形码
+                barcodeData = barcode.data.decode("UTF-8")  # 先解码成字符串
+                str_lst.append(barcodeData)
+        return str_lst
+
+    def read_qr_code(self):
+        str_lst = []
+        for i in self.image.qrcode_segmentation:
+            min_x = 9999999999999
+            min_y = 9999999999999
+            max_x = 0
+            max_y = 0
+            for item in i:
+                if item[0] > max_x:
+                    max_x = item[0]
+                if item[0] < min_x:
+                    min_x = item[0]
+                if item[1] > max_y:
+                    max_y = item[1]
+                if item[1] < min_y:
+                    min_y = item[1]
+            pic = self.image.raw[min_y:max_y, min_x:max_x]
+            height, width = pic.shape[:2]
+            if height*width==0:
+                continue
+            res = decode(((pic.tobytes(), width, height)))
+            if len(res) == 0:
+                continue
+            str_lst.append(res[0].data.decode("UTF-8"))
+        return str_lst
+
+    def decode_ocr(self):
+        str_lst = []
+        for i in self.image.character_segmentation:
+            min_x = 9999999999999
+            min_y = 9999999999999
+            max_x = 0
+            max_y = 0
+            for item in i:
+                if item[0] > max_x:
+                    max_x = item[0]
+                if item[0] < min_x:
+                    min_x = item[0]
+                if item[1] > max_y:
+                    max_y = item[1]
+                if item[1] < min_y:
+                    min_y = item[1]
+            pic = self.image.raw[min_y:max_y, min_x:max_x]
+            height, width = pic.shape[:2]
+            if height * width == 0:
+                continue
+            string = pytesseract.image_to_string(pic)
+            str_lst.append(string)
+        return str_lst
+
+    def write_detect_res(self):
+        f1 = open('data.txt', 'w', encoding="utf-8")
+        data_bar = self.read_bar_code()
+        for i in range(len(data_bar)):
+            f1.write(self.image.name + ' bar ' + data_bar[i]+'\n')
+        data_qr = self.read_qr_code()
+        for i in range(len(data_qr)):
+            f1.write(self.image.name + ' qr ' + data_qr[i]+'\n')
+        data_ocr = self.decode_ocr()
+        for i in range(len(data_ocr)):
+            f1.write(self.image.name + ' ocr ' + data_ocr[i]+'\n')
+        f1.close()
 
 
 if __name__ == '__main__':
