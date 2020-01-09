@@ -130,7 +130,7 @@ class Detector(object):
         return region
 
     # 获取标签位置
-    def get_label_area(self,area_thresh=1000):
+    def get_label_area(self, area_thresh=1000,stddv_thresh=30):
         img = self.image.raw
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         ret, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
@@ -172,21 +172,26 @@ class Detector(object):
             # 筛选那些太细的矩形，留下扁的
             if (height > width * 1.2):
                 continue
-            #求该矩形横平竖直的最小外接矩形
-            min_x=float("inf")
-            min_y=float("inf")
-            max_x=0
-            max_y=0
+            # 求该矩形横平竖直的最小外接矩形
+            min_x = float("inf")
+            min_y = float("inf")
+            max_x = 0
+            max_y = 0
             for item in box:
-                if item[0]>max_x:
-                    max_x=item[0]
-                if item[0]<min_x:
-                    min_x=item[0]
-                if item[1]>max_y:
-                    max_y=item[1]
-                if item[1]<min_y:
-                    min_y=item[1]
-            box[0][0]=max_x
+                if item[0] > max_x:
+                    max_x = item[0]
+                if item[0] < min_x:
+                    min_x = item[0]
+                if item[1] > max_y:
+                    max_y = item[1]
+                if item[1] < min_y:
+                    min_y = item[1]
+            # 筛选掉方差过小的点
+            small_img = img[min_y:max_y, min_x:max_x, :].copy()
+            (mean, stddv) = cv2.meanStdDev(small_img)
+            if stddv[0] < stddv_thresh:
+                continue
+            box[0][0] = max_x
             box[0][1] = max_y
             box[1][0] = min_x
             box[1][1] = max_y
@@ -511,13 +516,18 @@ class Detector(object):
                     max_y = item[1]
                 if item[1] < min_y:
                     min_y = item[1]
-            pic = self.image.raw[min_y:max_y, min_x:max_x]
+            height0, width0 = self.image.raw.shape[:2]
+            if min_x - 5 > 0 and min_y - 5 > 0 and max_x + 5 < width0 and max_y + 5 < height0:
+                pic = self.image.raw[min_y - 5:max_y + 5, min_x - 5:max_x + 5]
+            else:
+                pic = self.image.raw[min_y:max_y, min_x:max_x]
             height, width = pic.shape[:2]
             if height * width == 0:
                 continue
             string = pytesseract.image_to_string(pic)
-            if string != '':
-                str_lst.append(string)
+            a = string.split()
+            if a != []:
+                str_lst.append(a)
         return str_lst
 
     def write_detect_res(self):
@@ -525,18 +535,18 @@ class Detector(object):
         data_bar = self.read_bar_code()
 
         for i in range(len(data_bar)):
-
-            f1.write(self.image.name + ' bar ' + data_bar[i]+'\n')
+            f1.write(self.image.name + ' bar ' + data_bar[i] + '\n')
             f1.write('\n')
         data_qr = self.read_qr_code()
         for i in range(len(data_qr)):
-
-            f1.write(self.image.name + ' qr ' + data_qr[i]+'\n')
+            f1.write(self.image.name + ' qr ' + data_qr[i] + '\n')
             f1.write('\n')
         data_ocr = self.decode_ocr()
-        for i in range(len(data_ocr)):
-
-            f1.write(self.image.name + ' ocr ' + data_ocr[i]+'\n')
+        for i in data_ocr:
+            str = ''
+            for j in i:
+                str += j + ' '
+            f1.write(self.image.name + ' ocr ' + str + '\n')
             f1.write('\n')
         f1.close()
 
