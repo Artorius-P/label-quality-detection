@@ -23,6 +23,7 @@ class Reader(object):
 
             detector = Detector.Detector(self)
             self.result = detector.judge()
+            detector.write_detect_res()
 
             return True
         except:
@@ -38,6 +39,8 @@ class Reader(object):
 
             detector = Detector.Detector(self)
             self.result = detector.judge()
+
+            detector.write_detect_res()
 
             return True
         except:

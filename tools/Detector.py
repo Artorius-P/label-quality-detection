@@ -35,7 +35,7 @@ class Detector(object):
 
         return dilation2
 
-    # 查找和筛选二维码、条形码和光学字符区域
+    # 查找和筛选光学字符区域
     def find_region(self,img):
         region = []
 
@@ -438,11 +438,11 @@ class Detector(object):
         self.image.is_qualified=self.judge()
         return self.image
        
-            def read_bar_code(self):
+    def read_bar_code(self):
         str_lst = []
         for i in self.image.barcode_segmentation:
-            min_x = 9999999999999
-            min_y = 9999999999999
+            min_x = float("inf")
+            min_y = float("inf")
             max_x = 0
             max_y = 0
             for item in i:
@@ -469,8 +469,8 @@ class Detector(object):
     def read_qr_code(self):
         str_lst = []
         for i in self.image.qrcode_segmentation:
-            min_x = 9999999999999
-            min_y = 9999999999999
+            min_x = float("inf")
+            min_y = float("inf")
             max_x = 0
             max_y = 0
             for item in i:
@@ -495,8 +495,8 @@ class Detector(object):
     def decode_ocr(self):
         str_lst = []
         for i in self.image.character_segmentation:
-            min_x = 9999999999999
-            min_y = 9999999999999
+            min_x = float("inf")
+            min_y = float("inf")
             max_x = 0
             max_y = 0
             for item in i:
