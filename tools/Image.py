@@ -8,8 +8,9 @@ class Image(object):
         self.raw = raw  # 原图
         self.binary = None  # 二值化增强的图片
         self.is_qualified = None  # 是否合格
-        self.qrcode_segmentation = None  # 码的分割
-        self.character_segmentation = None  # 文字的分割
+        self.qrcode_segmentation = []  # 二维码的分割
+        self.character_segmentation = []  # 文字的分割
+        self.barcode_segmentation=[] # 条形码的分割
         self._to_binary()
         self.find_square()
 
@@ -57,9 +58,7 @@ class Image(object):
 
             if length(box) < lmin or length(box) > lmax:  # 筛去边长太短的点
                 continue
-            print(box)
             box = np.int0(box)
-            cv2.drawContours(self.raw, [box], 0, (0, 0, 255), 2)
             boxes.append(box)
         self.qrcode_segmentation = boxes
 
@@ -67,7 +66,7 @@ class Image(object):
 if __name__ == '__main__':
     #cv2.namedWindow("test", 0)
     cv2.namedWindow("raw", 0)
-    raw = cv2.imread(r'..\2-1.png')
+    raw = cv2.imread(r'..\3-2.png')
     image = Image('test', raw)
     print(image.qrcode_segmentation)
     cv2.imshow('raw', image.raw)

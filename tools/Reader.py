@@ -1,7 +1,7 @@
 import cv2
 import time
 
-from Image import Image
+import Image
 
 class Reader(object):
 
@@ -18,7 +18,7 @@ class Reader(object):
 
         try:
             pic = cv2.imread(path)
-            self.img = Image(f'path:{path}', pic)
+            self.img = Image.Image(f'path:{path}', pic)
             return True
         except:
             return False
@@ -29,7 +29,7 @@ class Reader(object):
         try:
             cap = cv2.VideoCapture(0)
             _, pic = cap.read()
-            self.img = Image(f'camera:{time.time()}', pic)
+            self.img = Image.Image(f'camera:{time.time()}', pic)
             return True
         except:
             return False
