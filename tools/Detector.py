@@ -438,7 +438,7 @@ class Detector(object):
         self.image.is_qualified=self.judge()
         return self.image
        
-            def read_bar_code(self):
+    def read_bar_code(self):
         str_lst = []
         for i in self.image.barcode_segmentation:
             min_x = 9999999999999
@@ -463,7 +463,8 @@ class Detector(object):
                 continue
             for barcode in barcodes:  # 循环读取检测到的条形码
                 barcodeData = barcode.data.decode("UTF-8")  # 先解码成字符串
-                str_lst.append(barcodeData)
+                if barcodeData!='':
+                    str_lst.append(barcodeData)
         return str_lst
 
     def read_qr_code(self):
@@ -489,7 +490,9 @@ class Detector(object):
             res = decode(((pic.tobytes(), width, height)))
             if len(res) == 0:
                 continue
-            str_lst.append(res[0].data.decode("UTF-8"))
+            a=res[0].data.decode("UTF-8")
+            if a != '':
+                str_lst.append(a)
         return str_lst
 
     def decode_ocr(self):
@@ -513,22 +516,29 @@ class Detector(object):
             if height * width == 0:
                 continue
             string = pytesseract.image_to_string(pic)
-            str_lst.append(string)
+            if string != '':
+                str_lst.append(string)
         return str_lst
 
     def write_detect_res(self):
         f1 = open('data.txt', 'w', encoding="utf-8")
         data_bar = self.read_bar_code()
+
         for i in range(len(data_bar)):
+
             f1.write(self.image.name + ' bar ' + data_bar[i]+'\n')
+            f1.write('\n')
         data_qr = self.read_qr_code()
         for i in range(len(data_qr)):
+
             f1.write(self.image.name + ' qr ' + data_qr[i]+'\n')
+            f1.write('\n')
         data_ocr = self.decode_ocr()
         for i in range(len(data_ocr)):
-            f1.write(self.image.name + ' ocr ' + data_ocr[i]+'\n')
-        f1.close()
 
+            f1.write(self.image.name + ' ocr ' + data_ocr[i]+'\n')
+            f1.write('\n')
+        f1.close()
 
 if __name__ == '__main__':
     reader = Reader.Reader()
